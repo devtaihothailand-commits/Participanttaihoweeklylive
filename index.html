@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Meeting Attendance Search (Email)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-slate-50 min-h-screen p-4 md:p-10">
+
+    <div class="max-w-4xl mx-auto">
+        <div class="text-center mb-8">
+            <h1 class="text-3xl font-bold text-slate-800">ระบบเช็คชื่อเข้าประชุมรายสัปดาห์</h1>
+            <p class="text-slate-500 mt-2">ค้นหาด้วยอีเมลเพื่อดูประวัติการเข้าเรียน 12 สัปดาห์</p>
+        </div>
+
+        <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 mb-8">
+            <div class="flex flex-col md:flex-row gap-3">
+                <input type="email" id="emailInput" placeholder="กรอกอีเมลของคุณ (เช่น example@mail.com)" 
+                    class="flex-1 p-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none transition">
+                <button onclick="fetchAndSearch()" id="searchBtn"
+                    class="bg-indigo-600 hover:bg-indigo-700 text-white px-8 py-3 rounded-xl font-semibold transition flex items-center justify-center">
+                    <span>ค้นหาข้อมูล</span>
+                </button>
+            </div>
+        </div>
+
+        <div id="loading" class="hidden text-center py-10">
+            <div class="inline-block animate-spin rounded-full h-8 w-8 border-4 border-indigo-500 border-t-transparent"></div>
+            <p class="mt-2 text-slate-500">กำลังดึงข้อมูลจากระบบ...</p>
+        </div>
+
+        <div id="resultArea" class="hidden">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                <div class="bg-indigo-50 p-6 rounded-2xl border border-indigo-100 text-center">
+                    <p class="text-indigo-600 text-xs font-bold uppercase tracking-wider">เข้าประชุมทั้งหมด</p>
+                    <h2 id="countDisplay" class="text-4xl font-black text-indigo-900 mt-1">0 / 12</h2>
+                </div>
+                <div class="bg-emerald-50 p-6 rounded-2xl border border-emerald-100 text-center">
+                    <p class="text-emerald-600 text-xs font-bold uppercase tracking-wider">เวลารวม (นาที)</p>
+                    <h2 id="totalTimeDisplay" class="text-4xl font-black text-emerald-900 mt-1">0</h2>
+                </div>
+            </div>
+
+            <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+                <table class="w-full text-left border-collapse">
+                    <thead>
+                        <tr class="bg-slate-100">
+                            <th class="p-4 text-slate-600 font-bold">สัปดาห์ที่</th>
+                            <th class="p-4 text-slate-600 font-bold text-center">สถานะ</th>
+                            <th class="p-4 text-slate-600 font-bold text-right">ระยะเวลา (นาที)</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tableBody"></tbody>
+                </table>
+            </div>
+        </div>
+
+        <div id="notFound" class="hidden text-center py-12 bg-white rounded-2xl border border-dashed border-slate-300">
+            <p class="text-slate-400 text-lg">❌ ไม่พบข้อมูลสำหรับอีเมลนี้ กรุณาตรวจสอบอีกครั้ง</p>
+        </div>
+    </div>
+
+    <script>
+        const CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vQQzJDmQ5LN5FZZy5RlNOJ7aIvUGQnxRzHHFn4aBjASlXG6gFlMfxYpkoby908Q8ASS3AlogJaiMx0V/pub?output=csv';
+
+        async function fetchAndSearch() {
+            const emailSearch = document.getElementById('emailInput').value.trim().toLowerCase();
+            if (!emailSearch) return alert('กรุณากรอกอีเมล');
+
+            const resultArea = document.getElementById('resultArea');
+            const notFound = document.getElementById('notFound');
+            const loading = document.getElementById('loading');
+            const tableBody = document.getElementById('tableBody');
+
+            // Reset UI
+            resultArea.classList.add('hidden');
+            notFound.classList.add('hidden');
+            loading.classList.remove('hidden');
+
+            try {
+                const response = await fetch(CSV_URL);
+                const csvData = await response.text();
+                
+                // แปลง CSV เป็น Array 2 มิติ
+                const rows = csvData.split('\n').map(row => row.split(','));
+                
+                // ค้นหาแถวที่ Email ตรงกัน (สมมติ Email อยู่ Column แรก)
+                // .toLowerCase() เพื่อให้ค้นหาได้แม่นยำขึ้นไม่ว่าจะพิมพ์ตัวเล็กหรือใหญ่
+                const targetRow = rows.find((row, index) => index > 0 && row[0]?.trim().toLowerCase() === emailSearch);
+
+                if (targetRow) {
+                    let attendedWeeks = 0;
+                    let totalMinutes = 0;
+                    tableBody.innerHTML = '';
+
+                    // วนลูปสัปดาห์ที่ 1 ถึง 12 (ข้อมูลเริ่มจาก Index 1 เป็นต้นไป)
+                    for (let i = 1; i <= 12; i++) {
+                        const duration = parseInt(targetRow[i]) || 0;
+                        if (duration > 0) attendedWeeks++;
+                        totalMinutes += duration;
+
+                        const rowHTML = `
+                            <tr class="border-t border-slate-100 hover:bg-slate-50 transition">
+                                <td class="p-4 text-slate-700 font-medium">สัปดาห์ที่ ${i}</td>
+                                <td class="p-4 text-center">
+                                    ${duration > 0 
+                                        ? '<span class="bg-green-100 text-green-700 px-3 py-1 rounded-full text-xs font-bold">เข้าเรียน</span>' 
+                                        : '<span class="bg-rose-50 text-rose-400 px-3 py-1 rounded-full text-xs font-bold font-light">ขาด</span>'}
+                                </td>
+                                <td class="p-4 text-right font-mono text-slate-600">${duration}</td>
+                            </tr>
+                        `;
+                        tableBody.innerHTML += rowHTML;
+                    }
+
+                    document.getElementById('countDisplay').innerText = `${attendedWeeks} / 12`;
+                    document.getElementById('totalTimeDisplay').innerText = totalMinutes.toLocaleString();
+                    
+                    resultArea.classList.remove('hidden');
+                } else {
+                    notFound.classList.remove('hidden');
+                }
+            } catch (error) {
+                console.error('Error fetching data:', error);
+                alert('เกิดข้อผิดพลาดในการดึงข้อมูล กรุณาลองใหม่');
+            } finally {
+                loading.classList.add('hidden');
+            }
+        }
+    </script>
+</body>
+</html>
